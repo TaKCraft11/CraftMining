@@ -1,50 +1,15 @@
 package com.craftmining;
 
 import org.bukkit.ChatColor;
-import org.bukkit.GameMode;
 import org.bukkit.Material;
-import org.bukkit.World;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.entity.Player;
 
-import java.util.Set;
-
+/** Donne l'XP de minage, les montées de niveau et les tokens. */
 public class MiningListener implements Listener {
-
-    private static final Set<Material> BLOCS_RECOMPENSES = Set.of(
-            Material.COAL_ORE,              Material.DEEPSLATE_COAL_ORE,
-            Material.IRON_ORE,              Material.DEEPSLATE_IRON_ORE,
-            Material.COPPER_ORE,            Material.DEEPSLATE_COPPER_ORE,
-            Material.GOLD_ORE,              Material.DEEPSLATE_GOLD_ORE,
-            Material.LAPIS_ORE,             Material.DEEPSLATE_LAPIS_ORE,
-            Material.REDSTONE_ORE,          Material.DEEPSLATE_REDSTONE_ORE,
-            Material.DIAMOND_ORE,           Material.DEEPSLATE_DIAMOND_ORE,
-            Material.EMERALD_ORE,           Material.DEEPSLATE_EMERALD_ORE,
-            Material.ANCIENT_DEBRIS,
-            Material.NETHER_QUARTZ_ORE,     Material.NETHER_GOLD_ORE,
-            Material.AMETHYST_CLUSTER
-    );
-
-    private static final Set<Material> BLOCS_NETHER_ONLY = Set.of(
-            Material.ANCIENT_DEBRIS,
-            Material.NETHER_QUARTZ_ORE,
-            Material.NETHER_GOLD_ORE
-    );
-
-    private static final Set<Material> BLOCS_OVERWORLD_ONLY = Set.of(
-            Material.COAL_ORE,              Material.DEEPSLATE_COAL_ORE,
-            Material.IRON_ORE,              Material.DEEPSLATE_IRON_ORE,
-            Material.COPPER_ORE,            Material.DEEPSLATE_COPPER_ORE,
-            Material.GOLD_ORE,              Material.DEEPSLATE_GOLD_ORE,
-            Material.LAPIS_ORE,             Material.DEEPSLATE_LAPIS_ORE,
-            Material.REDSTONE_ORE,          Material.DEEPSLATE_REDSTONE_ORE,
-            Material.DIAMOND_ORE,           Material.DEEPSLATE_DIAMOND_ORE,
-            Material.EMERALD_ORE,           Material.DEEPSLATE_EMERALD_ORE,
-            Material.AMETHYST_CLUSTER
-    );
 
     private final CraftMining plugin;
     private final TokenManager tokenManager;
@@ -58,24 +23,14 @@ public class MiningListener implements Listener {
         this.progressBar  = progressBar;
     }
 
-    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    // MONITOR : on récompense en dernier, une fois que la casse est confirmée
+    // (aucun plugin de protection ne peut plus l'annuler après nous).
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
+        if (MiningRules.check(event, plugin.getBlockTrackListener()) != MiningRules.Verdict.REWARD) return;
+
         Player player = event.getPlayer();
-        Material type = event.getBlock().getType();
-
-        if (player.getGameMode() == GameMode.CREATIVE) return;
-        if (!BLOCS_RECOMPENSES.contains(type)) return;
-
-        // Anti-exploit bloc re-posé
-        if (plugin.getBlockTrackListener().isReplaced(event.getBlock())) return;
-
-        // Anti-exploit dimension
-        World.Environment env = event.getBlock().getWorld().getEnvironment();
-
-        if (BLOCS_NETHER_ONLY.contains(type) && env != World.Environment.NETHER) return;
-        if (BLOCS_OVERWORLD_ONLY.contains(type) && env != World.Environment.NORMAL) return;
-
-        int xpGained = getXpForBlock(event);
+        int xpGained = getXpForBlock(event.getBlock().getType());
         if (xpGained <= 0) return;
 
         double mult = plugin.getShopManager().getXpMultiplier(player.getUniqueId());
@@ -89,8 +44,7 @@ public class MiningListener implements Listener {
         int tokensAwarded = tokenManager.onBlockMined(player);
         if (tokensAwarded > 0) {
             String msg = plugin.getConfig()
-                    .getString("messages.token-earned-mining",
-                            "&7+&d{amount} token(s) ✦ &8(minage)")
+                    .getString("messages.token-earned-mining", "&7+&d{amount} token(s) ✦ &8(minage)")
                     .replace("{amount}", String.valueOf(tokensAwarded));
             player.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
         }
@@ -101,8 +55,7 @@ public class MiningListener implements Listener {
     }
 
     private void checkLevelUp(Player player, PlayerData data) {
-        int currentLevel    = data.getLevel();
-        int xpNeededForNext = ProgressBarManager.getXpForLevel(currentLevel + 1);
+        int xpNeededForNext = ProgressBarManager.getXpForLevel(data.getLevel() + 1);
 
         while (data.getXp() >= xpNeededForNext) {
             data.incrementLevel();
@@ -115,30 +68,26 @@ public class MiningListener implements Listener {
                     .replace("{level}", String.valueOf(newLevel))
                     .replace("{tokens}", String.valueOf(bonusTokens));
             player.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
+
             xpNeededForNext = ProgressBarManager.getXpForLevel(newLevel + 1);
         }
     }
 
-    private int getXpForBlock(BlockBreakEvent event) {
-        return switch (event.getBlock().getType()) {
-            case COAL_ORE, DEEPSLATE_COAL_ORE ->
-                    plugin.getConfig().getInt("xp.per-block", 10);
+    private int getXpForBlock(Material type) {
+        int base = plugin.getConfig().getInt("xp.per-block", 10);
+        return switch (type) {
+            case COAL_ORE, DEEPSLATE_COAL_ORE,
+                 NETHER_QUARTZ_ORE, NETHER_GOLD_ORE -> base;
             case IRON_ORE, DEEPSLATE_IRON_ORE,
-                 COPPER_ORE, DEEPSLATE_COPPER_ORE ->
-                    (int)(plugin.getConfig().getInt("xp.per-block", 10) * 1.5);
+                 COPPER_ORE, DEEPSLATE_COPPER_ORE -> (int) (base * 1.5);
             case GOLD_ORE, DEEPSLATE_GOLD_ORE,
                  LAPIS_ORE, DEEPSLATE_LAPIS_ORE,
-                 REDSTONE_ORE, DEEPSLATE_REDSTONE_ORE ->
-                    (int)(plugin.getConfig().getInt("xp.per-block", 10) * 2.0);
+                 REDSTONE_ORE, DEEPSLATE_REDSTONE_ORE -> base * 2;
             case DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE,
                  EMERALD_ORE, DEEPSLATE_EMERALD_ORE ->
-                    (int)(plugin.getConfig().getDouble("xp.rare-block-multiplier", 3.0)
-                            * plugin.getConfig().getInt("xp.per-block", 10));
-            case NETHER_QUARTZ_ORE, NETHER_GOLD_ORE ->
-                    plugin.getConfig().getInt("xp.per-block", 10);
-            case ANCIENT_DEBRIS ->
-                    (int)(plugin.getConfig().getInt("xp.per-block", 10) * 5.0);
-            default -> 0;
+                    (int) (base * plugin.getConfig().getDouble("xp.rare-block-multiplier", 3.0));
+            case ANCIENT_DEBRIS -> base * 5;
+            default -> 0; // améthyste : cristaux uniquement, pas d'XP
         };
     }
 }
