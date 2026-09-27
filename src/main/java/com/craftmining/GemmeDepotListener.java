@@ -55,6 +55,12 @@ public class GemmeDepotListener implements Listener {
 
         event.setCancelled(true);
 
+        // Données pas encore chargées (juste après la connexion) : les cristaux seraient perdus
+        if (!crystalManager.isReady(player)) {
+            player.sendMessage(ChatColor.YELLOW + "⏳ Chargement de tes données en cours, réessaie dans un instant.");
+            return;
+        }
+
         int stackAmount = hand.getAmount();
         int requested   = player.isSneaking() ? stackAmount : 1;
 

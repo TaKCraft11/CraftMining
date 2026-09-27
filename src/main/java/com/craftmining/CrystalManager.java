@@ -3,6 +3,9 @@ package com.craftmining;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 
+import java.util.Locale;
+
+/** Gestion des Cristaux des Abymes : solde, gains au minage, formatage. */
 public class CrystalManager {
 
     private final CraftMining plugin;
@@ -11,6 +14,14 @@ public class CrystalManager {
     public CrystalManager(CraftMining plugin, PlayerDataManager playerDataManager) {
         this.plugin            = plugin;
         this.playerDataManager = playerDataManager;
+    }
+
+    /**
+     * Les données du joueur sont-elles chargées ?
+     * Tant que ce n'est pas le cas, tout gain serait perdu (fiche temporaire non sauvegardée).
+     */
+    public boolean isReady(Player player) {
+        return playerDataManager.isLoaded(player.getUniqueId());
     }
 
     public long getBalance(Player player) {
@@ -34,12 +45,12 @@ public class CrystalManager {
         return getBalance(player) >= amount;
     }
 
+    /** Cristaux gagnés pour un bloc, bonus de profondeur compris. */
     public long calculateCrystals(String blockType, int y) {
         FileConfiguration cfg = plugin.getConfig();
         long base = cfg.getLong("crystal-rates." + blockType, 0L);
         if (base <= 0) return 0;
-        double multiplier = getDepthMultiplier(y, cfg);
-        return Math.round(base * multiplier);
+        return Math.round(base * getDepthMultiplier(y, cfg));
     }
 
     private double getDepthMultiplier(int y, FileConfiguration cfg) {
@@ -50,7 +61,8 @@ public class CrystalManager {
         return 1.0;
     }
 
+    /** 183812 -> "183 812", quelle que soit la langue du serveur. */
     public String format(long amount) {
-        return String.format("%,d", amount).replace(',', ' ');
+        return String.format(Locale.ROOT, "%,d", amount).replace(',', ' ');
     }
 }
