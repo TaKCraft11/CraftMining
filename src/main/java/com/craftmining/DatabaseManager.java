@@ -42,12 +42,23 @@ public class DatabaseManager {
             );
             """;
 
+    /** Ancien système anti-dupe (un identifiant = un dépôt). Conservé pour les anciennes gemmes. */
     private static final String CREATE_CRYSTAL_ITEMS = """
             CREATE TABLE IF NOT EXISTS crystal_items_used (
                 item_uuid   TEXT    PRIMARY KEY,
                 player_uuid TEXT    NOT NULL,
                 amount      INTEGER NOT NULL,
                 used_at     INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            );
+            """;
+
+    /** Registre des gemmes : combien ont été émises et combien déposées, par identifiant. */
+    private static final String CREATE_GEM_LEDGER = """
+            CREATE TABLE IF NOT EXISTS gem_ledger (
+                gem_uuid   TEXT    PRIMARY KEY,
+                issued     INTEGER NOT NULL,
+                redeemed   INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
             """;
 
@@ -113,6 +124,7 @@ public class DatabaseManager {
                 stmt.execute("PRAGMA synchronous=NORMAL;");
                 stmt.execute(CREATE_PLAYER_TABLE);
                 stmt.execute(CREATE_CRYSTAL_ITEMS);
+                stmt.execute(CREATE_GEM_LEDGER);
                 stmt.execute(CREATE_REPLACED_BLOCKS);
             }
 
@@ -235,9 +247,77 @@ public class DatabaseManager {
     }
 
     // ─────────────────────────────────────────────
-    //  GEMMES ABYSSALES — Anti-dupe
+    //  GEMMES ABYSSALES — Registre anti-dupe
     // ─────────────────────────────────────────────
 
+    /** Enregistre l'émission de {@code quantity} gemmes sous un même identifiant. */
+    public synchronized boolean registerGems(String gemUuid, int quantity) {
+        if (!isConnected()) return false;
+        try (PreparedStatement ps = connection.prepareStatement(
+                "INSERT INTO gem_ledger (gem_uuid, issued, redeemed) VALUES (?, ?, 0)")) {
+            ps.setString(1, gemUuid);
+            ps.setInt(2, quantity);
+            ps.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Erreur d'enregistrement de gemmes " + gemUuid, e);
+            return false;
+        }
+    }
+
+    /**
+     * Dépose des gemmes : n'accorde JAMAIS plus que ce qui a été émis pour cet identifiant.
+     * @param requested   nombre de gemmes que le joueur veut déposer
+     * @param stackAmount taille de la pile en main (sert uniquement pour les anciennes gemmes)
+     * @return nombre de gemmes accordées (0 = déjà toutes déposées), ou -1 en cas d'erreur
+     */
+    public synchronized int redeemGems(String gemUuid, int requested, int stackAmount) {
+        if (!isConnected() || requested <= 0) return -1;
+        try {
+            int issued   = -1;
+            int redeemed = 0;
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT issued, redeemed FROM gem_ledger WHERE gem_uuid = ?")) {
+                ps.setString(1, gemUuid);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        issued   = rs.getInt("issued");
+                        redeemed = rs.getInt("redeemed");
+                    }
+                }
+            }
+
+            if (issued < 0) {
+                // Gemme créée avant le registre (ancien système)
+                if (isCrystalItemUsed(gemUuid)) return 0;
+                try (PreparedStatement ps = connection.prepareStatement(
+                        "INSERT INTO gem_ledger (gem_uuid, issued, redeemed) VALUES (?, ?, ?)")) {
+                    ps.setString(1, gemUuid);
+                    ps.setInt(2, stackAmount);
+                    ps.setInt(3, requested);
+                    ps.executeUpdate();
+                }
+                return requested;
+            }
+
+            int granted = Math.min(requested, issued - redeemed);
+            if (granted <= 0) return 0;
+
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "UPDATE gem_ledger SET redeemed = redeemed + ? WHERE gem_uuid = ?")) {
+                ps.setInt(1, granted);
+                ps.setString(2, gemUuid);
+                ps.executeUpdate();
+            }
+            return granted;
+
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.WARNING, "Erreur de dépôt de gemmes " + gemUuid, e);
+            return -1;
+        }
+    }
+
+    /** Ancien système : cet identifiant a-t-il déjà été déposé ? */
     public synchronized boolean isCrystalItemUsed(String itemUuid) {
         if (!isConnected()) return true; // par prudence : on considère la gemme comme déjà utilisée
         try (PreparedStatement ps = connection.prepareStatement(
@@ -252,7 +332,7 @@ public class DatabaseManager {
         }
     }
 
-    /** @return true si la gemme vient d'être consommée, false si elle l'était déjà (tentative de dupe). */
+    /** Ancien système, conservé pour compatibilité. */
     public synchronized boolean consumeCrystalItem(String itemUuid, UUID playerUuid, long amount) {
         if (!isConnected()) return false;
         try (PreparedStatement ps = connection.prepareStatement(
