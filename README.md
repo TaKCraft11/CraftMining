@@ -17,7 +17,7 @@
 
 ---
 
-## 🪨 C'est quoi CraftMining ?
+## 💎 C'est quoi CraftMining ?
 
 CraftMining transforme complètement l'expérience de minage sur les serveurs Minecraft Survival.
 Tokens, cristaux, gemmes abyssales, shop, classement — chaque bloc cassé te rapproche de la légende.
