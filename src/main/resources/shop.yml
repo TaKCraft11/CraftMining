@@ -1,0 +1,155 @@
+# CraftMining — shop.yml
+
+items:
+
+  # BUFFS
+  haste_1:
+    type: BUFF
+    name: "&eHaste I &8(60s)"
+    description: "Augmentez votre vitesse de minage pendant 60 secondes."
+    icon: GOLDEN_PICKAXE
+    price: 15
+    effect: FAST_DIGGING
+    duration: 60
+    amplifier: 0
+
+  haste_2:
+    type: BUFF
+    name: "&6Haste II &8(60s)"
+    description: "Doublez votre vitesse de minage pendant 60 secondes."
+    icon: DIAMOND_PICKAXE
+    price: 30
+    effect: FAST_DIGGING
+    duration: 60
+    amplifier: 1
+
+  speed:
+    type: BUFF
+    name: "&bVitesse &8(120s)"
+    description: "Deplacez-vous rapidement pendant 2 minutes."
+    icon: FEATHER
+    price: 20
+    effect: SPEED
+    duration: 120
+    amplifier: 1
+
+  night_vision:
+    type: BUFF
+    name: "&9Vision nocturne &8(180s)"
+    description: "Voyez dans le noir pendant 3 minutes."
+    icon: ENDER_EYE
+    price: 25
+    effect: NIGHT_VISION
+    duration: 180
+    amplifier: 0
+
+  luck:
+    type: BUFF
+    name: "&aChance &8(300s)"
+    description: "Augmentez vos loots de minage pendant 5 minutes."
+    icon: RABBIT_FOOT
+    price: 50
+    effect: LUCK
+    duration: 300
+    amplifier: 0
+
+  # LOOT CRATES
+  crate_basic:
+    type: LOOT_CRATE
+    name: "&7Caisse Basique"
+    description: "Une caisse mystere avec des recompenses aleatoires."
+    icon: CHEST
+    price: 40
+    crate-id: basic
+
+  crate_rare:
+    type: LOOT_CRATE
+    name: "&bCaisse Rare"
+    description: "Une caisse de qualite superieure."
+    icon: ENDER_CHEST
+    price: 100
+    crate-id: rare
+
+  # COSMETICS
+  prefix_miner:
+    type: COSMETIC
+    name: "&8[&6Mineur&8] &fPrefixe"
+    description: "Affichez le titre Mineur devant votre pseudo."
+    icon: NAME_TAG
+    price: 60
+    cosmetic-id: "[&6Mineur&r] "
+
+  prefix_elite:
+    type: COSMETIC
+    name: "&8[&bElite&8] &fPrefixe"
+    description: "Affichez le titre Elite devant votre pseudo."
+    icon: PLAYER_HEAD
+    price: 150
+    cosmetic-id: "[&bElite&r] "
+
+  # POUVOIRS
+  xp_boost:
+    type: POWER
+    name: "&6XP Boost &8(2 min)"
+    description: "Multipliez votre gain d'XP par 1.25 pendant 2 minutes."
+    icon: EXPERIENCE_BOTTLE
+    price: 200
+    power-type: XP_BOOST
+    power-value: 1.25
+    power-duration: 120
+
+  invincibility:
+    type: POWER
+    name: "&7Invincibilite &8(30s)"
+    description: "Devenez invincible pendant 30 secondes."
+    icon: SHIELD
+    price: 100
+    power-type: INVINCIBILITY
+    power-value: 1.0
+    power-duration: 30
+
+  regen:
+    type: POWER
+    name: "&cRegénération instantanee"
+    description: "Regenerez instantanement toute votre sante."
+    icon: GOLDEN_APPLE
+    price: 50
+    power-type: REGEN
+    power-value: 1.0
+    power-duration: 5
+
+  fire_resistance:
+    type: POWER
+    name: "&6Resistance au feu &8(3 min)"
+    description: "Devenez immunise au feu pendant 3 minutes."
+    icon: BLAZE_POWDER
+    price: 75
+    power-type: FIRE_RESISTANCE
+    power-value: 1.0
+    power-duration: 180
+
+# CRATES
+crates:
+  basic:
+    rewards:
+      - "&e32x Charbon"
+      - "&e16x Fer"
+      - "&e8x Or"
+      - "&d+50 Tokens"
+    reward-commands:
+      "&e32x Charbon": "give {player} coal 32"
+      "&e16x Fer": "give {player} iron_ingot 16"
+      "&e8x Or": "give {player} gold_ingot 8"
+      "&d+50 Tokens": "craftmining tokens give {player} 50"
+
+  rare:
+    rewards:
+      - "&b4x Diamant"
+      - "&a2x Emeraude"
+      - "&64x Netherite Scrap"
+      - "&d+200 Tokens"
+    reward-commands:
+      "&b4x Diamant": "give {player} diamond 4"
+      "&a2x Emeraude": "give {player} emerald 2"
+      "&64x Netherite Scrap": "give {player} netherite_scrap 4"
+      "&d+200 Tokens": "craftmining tokens give {player} 200"

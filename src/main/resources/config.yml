@@ -1,0 +1,93 @@
+# CraftMining — config.yml
+
+# Database
+database:
+  auto-save-minutes: 5
+
+# XP
+xp:
+  per-block: 10
+  rare-block-multiplier: 3.0
+  per-smelt: 5
+
+# Leveling
+leveling:
+  xp-base: 50
+  max-level: 0
+
+# Tokens
+tokens:
+  mining:
+    blocks-per-token: 10
+  smelting:
+    smelts-per-token: 5
+  levelup:
+    level-multiplier: 5
+  streak:
+    enabled: true
+    interval-seconds: 30
+    bonus-tokens: 2
+
+# Progress Bar
+progressbar:
+  enabled: true
+  display-ticks: 60
+
+# Messages
+messages:
+  level-up: "&6⬆ &eLevel UP ! &7Vous êtes maintenant niveau &a{level}&7 ! &d+{tokens} tokens ✦"
+  token-earned-mining: "&7+&d{amount} token(s) ✦ &8(minage)"
+  token-earned-smelt: "&7+&d{amount} token(s) ✦ &8(fonte)"
+  token-earned-streak: "&7+&d{amount} token(s) ✦ &8(streak !)"
+
+# ════════════════════════════════════════
+#  CRISTAUX DES ABYMES
+# ════════════════════════════════════════
+
+# Taux de cristaux par minerai
+crystal-rates:
+  # Overworld normal
+  COAL_ORE: 3
+  IRON_ORE: 5
+  COPPER_ORE: 4
+  GOLD_ORE: 20
+  LAPIS_ORE: 25
+  REDSTONE_ORE: 12
+  DIAMOND_ORE: 500
+  EMERALD_ORE: 750
+
+  # Overworld deepslate
+  DEEPSLATE_COAL_ORE: 5
+  DEEPSLATE_IRON_ORE: 8
+  DEEPSLATE_COPPER_ORE: 6
+  DEEPSLATE_GOLD_ORE: 30
+  DEEPSLATE_LAPIS_ORE: 38
+  DEEPSLATE_REDSTONE_ORE: 18
+  DEEPSLATE_DIAMOND_ORE: 500
+  DEEPSLATE_EMERALD_ORE: 1000
+
+  # Nether
+  NETHER_QUARTZ_ORE: 10
+  NETHER_GOLD_ORE: 8
+  ANCIENT_DEBRIS: 2000
+  MAGMA_BLOCK: 2
+
+  # Améthyste
+  AMETHYST_CLUSTER: 25
+
+# Bonus de profondeur
+depth-bonus:
+  tier1:
+    bonus: 0.10   # Y 0 à -16 : +10%
+  tier2:
+    bonus: 0.25   # Y -16 à -32 : +25%
+  tier3:
+    bonus: 0.50   # Y -32 à -58 : +50%
+  tier4:
+    bonus: 0.75   # Sous Y -58 : +75%
+
+# Anti-exploit
+anti-exploit:
+  silk-touch: true        # 0 cristaux + 0 loots en Silk Touch
+  block-tracking: true    # 0 cristaux sur blocs re-posés
+  block-retention-days: 7 # Nettoyage BDD après X jours

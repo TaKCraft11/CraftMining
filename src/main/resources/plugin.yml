@@ -1,0 +1,31 @@
+name: CraftMining
+version: '${project.version}'
+main: com.craftmining.CraftMining
+api-version: '1.21'
+description: Plugin de minage avec XP, niveaux, tokens, Cristaux des Abymes, shop et classement pour Paper 1.21
+authors: [TaKCraft11]
+
+commands:
+  craftmining:
+    description: Commande principale de CraftMining
+    usage: /craftmining <stats|shop|top|reload|tokens>
+    aliases: [cm, mining]
+    permission: craftmining.use
+
+permissions:
+  craftmining.use:
+    description: Accès aux commandes de base
+    default: true
+
+  craftmining.top:
+    description: Voir le classement /craftmining top
+    default: true
+    children:
+      craftmining.use: true
+
+  craftmining.admin:
+    description: Commandes admin (reload, stats des autres joueurs, gestion des tokens)
+    default: op
+    children:
+      craftmining.use: true
+      craftmining.top: true
