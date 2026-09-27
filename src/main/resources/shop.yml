@@ -9,7 +9,7 @@ items:
     description: "Augmentez votre vitesse de minage pendant 60 secondes."
     icon: GOLDEN_PICKAXE
     price: 15
-    effect: FAST_DIGGING
+    effect: HASTE
     duration: 60
     amplifier: 0
 
@@ -19,14 +19,14 @@ items:
     description: "Doublez votre vitesse de minage pendant 60 secondes."
     icon: DIAMOND_PICKAXE
     price: 30
-    effect: FAST_DIGGING
+    effect: HASTE
     duration: 60
     amplifier: 1
 
   speed:
     type: BUFF
     name: "&bVitesse &8(120s)"
-    description: "Deplacez-vous rapidement pendant 2 minutes."
+    description: "Déplacez-vous rapidement pendant 2 minutes."
     icon: FEATHER
     price: 20
     effect: SPEED
@@ -46,7 +46,7 @@ items:
   luck:
     type: BUFF
     name: "&aChance &8(300s)"
-    description: "Augmentez vos loots de minage pendant 5 minutes."
+    description: "Augmente les loots pendant 5 minutes."
     icon: RABBIT_FOOT
     price: 50
     effect: LUCK
@@ -57,7 +57,7 @@ items:
   crate_basic:
     type: LOOT_CRATE
     name: "&7Caisse Basique"
-    description: "Une caisse mystere avec des recompenses aleatoires."
+    description: "Une caisse mystère avec des récompenses aléatoires."
     icon: CHEST
     price: 40
     crate-id: basic
@@ -65,7 +65,7 @@ items:
   crate_rare:
     type: LOOT_CRATE
     name: "&bCaisse Rare"
-    description: "Une caisse de qualite superieure."
+    description: "Une caisse de qualité supérieure."
     icon: ENDER_CHEST
     price: 100
     crate-id: rare
@@ -73,19 +73,19 @@ items:
   # COSMETICS
   prefix_miner:
     type: COSMETIC
-    name: "&8[&6Mineur&8] &fPrefixe"
-    description: "Affichez le titre Mineur devant votre pseudo."
+    name: "&8[&6Mineur&8] &fPréfixe"
+    description: "Affichez le titre [Mineur] devant votre pseudo."
     icon: NAME_TAG
     price: 60
     cosmetic-id: "[&6Mineur&r] "
 
   prefix_elite:
     type: COSMETIC
-    name: "&8[&bElite&8] &fPrefixe"
-    description: "Affichez le titre Elite devant votre pseudo."
+    name: "&8[&bÉlite&8] &fPréfixe"
+    description: "Affichez le titre [Élite] devant votre pseudo."
     icon: PLAYER_HEAD
     price: 150
-    cosmetic-id: "[&bElite&r] "
+    cosmetic-id: "[&bÉlite&r] "
 
   # POUVOIRS
   xp_boost:
@@ -100,7 +100,7 @@ items:
 
   invincibility:
     type: POWER
-    name: "&7Invincibilite &8(30s)"
+    name: "&7Invincibilité &8(30s)"
     description: "Devenez invincible pendant 30 secondes."
     icon: SHIELD
     price: 100
@@ -110,8 +110,8 @@ items:
 
   regen:
     type: POWER
-    name: "&cRegénération instantanee"
-    description: "Regenerez instantanement toute votre sante."
+    name: "&cRégénération instantanée"
+    description: "Régénérez instantanément toute votre santé."
     icon: GOLDEN_APPLE
     price: 50
     power-type: REGEN
@@ -120,15 +120,35 @@ items:
 
   fire_resistance:
     type: POWER
-    name: "&6Resistance au feu &8(3 min)"
-    description: "Devenez immunise au feu pendant 3 minutes."
+    name: "&6Résistance au feu &8(3 min)"
+    description: "Devenez immunisé au feu pendant 3 minutes."
     icon: BLAZE_POWDER
     price: 75
     power-type: FIRE_RESISTANCE
     power-value: 1.0
     power-duration: 180
 
-# CRATES
+  # OUTILS
+  pick_fortune:
+    type: TOOL
+    name: "&6Pioche Fortune III"
+    description: "Une pioche en diamant enchantée Fortune III."
+    icon: DIAMOND_PICKAXE
+    price: 200
+    tool-material: DIAMOND_PICKAXE
+    enchants: "FORTUNE:3,EFFICIENCY:4,UNBREAKING:3"
+
+  pick_silk:
+    type: TOOL
+    name: "&bPioche Toucher de soie"
+    description: "Une pioche en diamant avec Toucher de soie."
+    icon: DIAMOND_PICKAXE
+    price: 180
+    tool-material: DIAMOND_PICKAXE
+    enchants: "SILK_TOUCH:1,EFFICIENCY:5,UNBREAKING:3"
+
+# CAISSES
+# Chaque texte de "rewards" doit avoir EXACTEMENT la même clé dans "reward-commands".
 crates:
   basic:
     rewards:
@@ -145,11 +165,11 @@ crates:
   rare:
     rewards:
       - "&b4x Diamant"
-      - "&a2x Emeraude"
+      - "&a2x Émeraude"
       - "&64x Netherite Scrap"
       - "&d+200 Tokens"
     reward-commands:
       "&b4x Diamant": "give {player} diamond 4"
-      "&a2x Emeraude": "give {player} emerald 2"
+      "&a2x Émeraude": "give {player} emerald 2"
       "&64x Netherite Scrap": "give {player} netherite_scrap 4"
       "&d+200 Tokens": "craftmining tokens give {player} 200"

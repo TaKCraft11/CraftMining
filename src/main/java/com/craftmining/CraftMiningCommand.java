@@ -46,7 +46,7 @@ public class CraftMiningCommand implements CommandExecutor, TabCompleter {
             case "stats"    -> handleStats(sender, args);
             case "reload"   -> handleReload(sender);
             case "tokens"   -> handleTokens(sender, args);
-            case "com/craftmining/shop" -> handleShop(sender);
+            case "shop"     -> handleShop(sender);
             case "top"      -> handleTop(sender, args);
             case "balance"  -> handleBalance(sender);
             case "retrait"  -> handleRetrait(sender, args);
@@ -273,7 +273,7 @@ public class CraftMiningCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1)
-            return filter(List.of("stats", "reload", "tokens", "com/craftmining/shop", "top", "balance", "retrait"), args[0]);
+            return filter(List.of("stats", "reload", "tokens", "shop", "top", "balance", "retrait"), args[0]);
         if (args.length == 2 && args[0].equalsIgnoreCase("top"))
             return filter(List.of("level", "blocs", "tokens"), args[1]);
         if (args.length == 2 && args[0].equalsIgnoreCase("stats"))
