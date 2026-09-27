@@ -1,36 +1,51 @@
 package com.craftmining;
 
 import java.io.File;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.logging.Level;
 
+/**
+ * Accès à la base SQLite du plugin.
+ * Toutes les méthodes publiques sont "synchronized" : une seule opération à la fois sur la
+ * connexion, quel que soit le thread qui l'appelle (thread principal ou thread de sauvegarde).
+ */
 public class DatabaseManager {
 
     private final CraftMining plugin;
     private Connection connection;
 
+    // ─────────────────────────────────────────────
+    //  REQUÊTES
+    // ─────────────────────────────────────────────
+
     private static final String CREATE_PLAYER_TABLE = """
             CREATE TABLE IF NOT EXISTS player_data (
-                uuid          TEXT    PRIMARY KEY,
-                username      TEXT    NOT NULL,
-                xp            INTEGER NOT NULL DEFAULT 0,
-                level         INTEGER NOT NULL DEFAULT 1,
-                tokens        INTEGER NOT NULL DEFAULT 0,
-                blocks_mined  INTEGER NOT NULL DEFAULT 0,
-                items_smelted INTEGER NOT NULL DEFAULT 0,
+                uuid           TEXT    PRIMARY KEY,
+                username       TEXT    NOT NULL,
+                xp             INTEGER NOT NULL DEFAULT 0,
+                level          INTEGER NOT NULL DEFAULT 1,
+                tokens         INTEGER NOT NULL DEFAULT 0,
+                blocks_mined   INTEGER NOT NULL DEFAULT 0,
+                items_smelted  INTEGER NOT NULL DEFAULT 0,
                 last_mine_time INTEGER NOT NULL DEFAULT 0,
-                last_seen     INTEGER NOT NULL DEFAULT 0,
-                crystals      INTEGER NOT NULL DEFAULT 0
+                last_seen      INTEGER NOT NULL DEFAULT 0,
+                crystals       INTEGER NOT NULL DEFAULT 0
             );
             """;
 
     private static final String CREATE_CRYSTAL_ITEMS = """
             CREATE TABLE IF NOT EXISTS crystal_items_used (
-                item_uuid   TEXT PRIMARY KEY,
-                player_uuid TEXT NOT NULL,
+                item_uuid   TEXT    PRIMARY KEY,
+                player_uuid TEXT    NOT NULL,
                 amount      INTEGER NOT NULL,
                 used_at     INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
@@ -38,18 +53,17 @@ public class DatabaseManager {
 
     private static final String CREATE_REPLACED_BLOCKS = """
             CREATE TABLE IF NOT EXISTS replaced_blocks (
-                world TEXT NOT NULL,
-                x     INTEGER NOT NULL,
-                y     INTEGER NOT NULL,
-                z     INTEGER NOT NULL,
+                world     TEXT    NOT NULL,
+                x         INTEGER NOT NULL,
+                y         INTEGER NOT NULL,
+                z         INTEGER NOT NULL,
                 placed_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
                 PRIMARY KEY (world, x, y, z)
             );
             """;
 
-    private static final String ADD_CRYSTALS_COLUMN = """
-            ALTER TABLE player_data ADD COLUMN crystals INTEGER NOT NULL DEFAULT 0;
-            """;
+    private static final String ADD_CRYSTALS_COLUMN =
+            "ALTER TABLE player_data ADD COLUMN crystals INTEGER NOT NULL DEFAULT 0;";
 
     private static final String UPSERT_PLAYER = """
             INSERT INTO player_data
@@ -70,89 +84,96 @@ public class DatabaseManager {
     private static final String SELECT_PLAYER =
             "SELECT * FROM player_data WHERE uuid = ?;";
 
+    /** %s = critère de tri (vient toujours de l'enum ci-dessous, jamais d'un joueur). */
     private static final String SELECT_TOP =
-            "SELECT * FROM player_data ORDER BY %s DESC LIMIT ?;";
+            "SELECT * FROM player_data ORDER BY %s LIMIT ?;";
 
     public DatabaseManager(CraftMining plugin) {
         this.plugin = plugin;
     }
 
-    public boolean initialize() {
+    // ─────────────────────────────────────────────
+    //  OUVERTURE / FERMETURE
+    // ─────────────────────────────────────────────
+
+    public synchronized boolean initialize() {
         try {
             File dataFolder = plugin.getDataFolder();
-            if (!dataFolder.exists()) dataFolder.mkdirs();
+            if (!dataFolder.exists() && !dataFolder.mkdirs()) {
+                plugin.getLogger().severe("Impossible de créer le dossier du plugin : " + dataFolder);
+                return false;
+            }
 
             File dbFile = new File(dataFolder, "craftmining.db");
-            String url  = "jdbc:sqlite:" + dbFile.getAbsolutePath();
-
             Class.forName("org.sqlite.JDBC");
-            connection = DriverManager.getConnection(url);
+            connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile.getAbsolutePath());
 
             try (Statement stmt = connection.createStatement()) {
                 stmt.execute("PRAGMA journal_mode=WAL;");
                 stmt.execute("PRAGMA synchronous=NORMAL;");
-                stmt.execute("PRAGMA foreign_keys=ON;");
-            }
-
-            try (Statement stmt = connection.createStatement()) {
                 stmt.execute(CREATE_PLAYER_TABLE);
                 stmt.execute(CREATE_CRYSTAL_ITEMS);
                 stmt.execute(CREATE_REPLACED_BLOCKS);
             }
 
-            // Migration colonne crystals
-            try (Statement stmt = connection.createStatement()) {
-                stmt.execute(ADD_CRYSTALS_COLUMN);
-            } catch (SQLException ignored) {}
+            // Migration : bases créées avant l'ajout des cristaux
+            if (!columnExists("player_data", "crystals")) {
+                try (Statement stmt = connection.createStatement()) {
+                    stmt.execute(ADD_CRYSTALS_COLUMN);
+                }
+                plugin.getLogger().info("Migration : colonne 'crystals' ajoutée à la base.");
+            }
 
-            plugin.getLogger().info("[CraftMining] Base de données SQLite initialisée : " + dbFile.getName());
+            plugin.getLogger().info("Base de données SQLite initialisée : " + dbFile.getName());
             return true;
 
         } catch (ClassNotFoundException e) {
-            plugin.getLogger().severe("[CraftMining] Driver SQLite introuvable ! " + e.getMessage());
+            plugin.getLogger().severe("Driver SQLite introuvable ! " + e.getMessage());
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "[CraftMining] Erreur SQL à l'initialisation", e);
+            plugin.getLogger().log(Level.SEVERE, "Erreur SQL à l'initialisation de la base", e);
         }
         return false;
     }
 
-    public void close() {
+    public synchronized void close() {
         try {
             if (connection != null && !connection.isClosed()) {
                 connection.close();
-                plugin.getLogger().info("[CraftMining] Connexion SQLite fermée.");
+                plugin.getLogger().info("Connexion SQLite fermée.");
             }
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "[CraftMining] Erreur fermeture SQLite", e);
+            plugin.getLogger().log(Level.WARNING, "Erreur à la fermeture de SQLite", e);
         }
     }
 
-    public void savePlayer(PlayerData data, String username) {
+    public synchronized boolean isConnected() {
+        try {
+            return connection != null && !connection.isClosed();
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  JOUEURS
+    // ─────────────────────────────────────────────
+
+    public synchronized void savePlayer(PlayerData data, String username) {
         if (!isConnected()) return;
         try (PreparedStatement ps = connection.prepareStatement(UPSERT_PLAYER)) {
-            ps.setString(1,  data.getUuid().toString());
-            ps.setString(2,  username);
-            ps.setInt(3,     data.getXp());
-            ps.setInt(4,     data.getLevel());
-            ps.setInt(5,     data.getTokens());
-            ps.setInt(6,     data.getBlocksMined());
-            ps.setInt(7,     data.getItemsSmelted());
-            ps.setLong(8,    data.getLastMineTime());
-            ps.setLong(9,    System.currentTimeMillis());
-            ps.setLong(10,   data.getCrystals());
+            bindPlayer(ps, data, username);
             ps.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING,
-                    "[CraftMining] Erreur sauvegarde joueur " + username, e);
+            plugin.getLogger().log(Level.WARNING, "Erreur de sauvegarde du joueur " + username, e);
         }
     }
 
-    public PlayerData loadPlayer(UUID uuid) {
+    public synchronized PlayerData loadPlayer(UUID uuid) {
         if (!isConnected()) return null;
         try (PreparedStatement ps = connection.prepareStatement(SELECT_PLAYER)) {
             ps.setString(1, uuid.toString());
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
                 PlayerData data = new PlayerData(uuid);
                 data.setXp(rs.getInt("xp"));
                 data.setLevel(rs.getInt("level"));
@@ -163,62 +184,76 @@ public class DatabaseManager {
                 return data;
             }
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING,
-                    "[CraftMining] Erreur chargement joueur " + uuid, e);
+            plugin.getLogger().log(Level.WARNING, "Erreur de chargement du joueur " + uuid, e);
+            return null;
         }
-        return null;
     }
 
-    public void saveAll(List<PlayerData> dataList,
-                        java.util.function.Function<UUID, String> nameResolver) {
+    /** Sauvegarde plusieurs joueurs en une seule transaction. */
+    public synchronized void saveAll(List<PlayerData> dataList, Function<UUID, String> nameResolver) {
         if (!isConnected() || dataList.isEmpty()) return;
         try {
             connection.setAutoCommit(false);
             try (PreparedStatement ps = connection.prepareStatement(UPSERT_PLAYER)) {
                 for (PlayerData data : dataList) {
                     String name = nameResolver.apply(data.getUuid());
-                    if (name == null) name = data.getUuid().toString();
-                    ps.setString(1,  data.getUuid().toString());
-                    ps.setString(2,  name);
-                    ps.setInt(3,     data.getXp());
-                    ps.setInt(4,     data.getLevel());
-                    ps.setInt(5,     data.getTokens());
-                    ps.setInt(6,     data.getBlocksMined());
-                    ps.setInt(7,     data.getItemsSmelted());
-                    ps.setLong(8,    data.getLastMineTime());
-                    ps.setLong(9,    System.currentTimeMillis());
-                    ps.setLong(10,   data.getCrystals());
+                    bindPlayer(ps, data, name != null ? name : data.getUuid().toString());
                     ps.addBatch();
                 }
                 ps.executeBatch();
             }
             connection.commit();
-            connection.setAutoCommit(true);
-            plugin.getLogger().info("[CraftMining] Auto-save : " + dataList.size() + " joueur(s).");
+            plugin.getLogger().info("Sauvegarde : " + dataList.size() + " joueur(s).");
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "[CraftMining] Erreur saveAll", e);
-            try { connection.rollback(); connection.setAutoCommit(true); }
-            catch (SQLException ignored) {}
+            plugin.getLogger().log(Level.SEVERE, "Erreur lors de la sauvegarde groupée", e);
+            try {
+                connection.rollback();
+            } catch (SQLException ignored) {
+                // rien de plus à faire : l'erreur principale est déjà dans la console
+            }
+        } finally {
+            try {
+                connection.setAutoCommit(true);
+            } catch (SQLException ignored) {
+                // connexion probablement fermée
+            }
         }
+    }
+
+    /** Remplit les 10 paramètres de UPSERT_PLAYER. */
+    private void bindPlayer(PreparedStatement ps, PlayerData data, String username) throws SQLException {
+        ps.setString(1, data.getUuid().toString());
+        ps.setString(2, username);
+        ps.setInt(3, data.getXp());
+        ps.setInt(4, data.getLevel());
+        ps.setInt(5, data.getTokens());
+        ps.setInt(6, data.getBlocksMined());
+        ps.setInt(7, data.getItemsSmelted());
+        ps.setLong(8, data.getLastMineTime());
+        ps.setLong(9, System.currentTimeMillis());
+        ps.setLong(10, data.getCrystals());
     }
 
     // ─────────────────────────────────────────────
     //  GEMMES ABYSSALES — Anti-dupe
     // ─────────────────────────────────────────────
 
-    public boolean isCrystalItemUsed(String itemUuid) {
-        if (!isConnected()) return true;
+    public synchronized boolean isCrystalItemUsed(String itemUuid) {
+        if (!isConnected()) return true; // par prudence : on considère la gemme comme déjà utilisée
         try (PreparedStatement ps = connection.prepareStatement(
                 "SELECT 1 FROM crystal_items_used WHERE item_uuid = ?")) {
             ps.setString(1, itemUuid);
-            return ps.executeQuery().next();
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "[CM] isCrystalItemUsed error", e);
+            plugin.getLogger().log(Level.WARNING, "Erreur de vérification d'une gemme", e);
             return true;
         }
     }
 
-    public boolean consumeCrystalItem(String itemUuid, UUID playerUuid, long amount) {
+    /** @return true si la gemme vient d'être consommée, false si elle l'était déjà (tentative de dupe). */
+    public synchronized boolean consumeCrystalItem(String itemUuid, UUID playerUuid, long amount) {
         if (!isConnected()) return false;
         try (PreparedStatement ps = connection.prepareStatement(
                 "INSERT OR IGNORE INTO crystal_items_used (item_uuid, player_uuid, amount) VALUES (?, ?, ?)")) {
@@ -227,103 +262,112 @@ public class DatabaseManager {
             ps.setLong(3, amount);
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "[CM] consumeCrystalItem error", e);
+            plugin.getLogger().log(Level.WARNING, "Erreur de consommation d'une gemme", e);
             return false;
         }
     }
 
     // ─────────────────────────────────────────────
-    //  BLOCS RE-POSÉS — Anti-exploit BDD
+    //  BLOCS RE-POSÉS — Anti-exploit
     // ─────────────────────────────────────────────
 
-    public void markBlockReplaced(String world, int x, int y, int z) {
+    public synchronized void markBlockReplaced(String world, int x, int y, int z) {
         if (!isConnected()) return;
         try (PreparedStatement ps = connection.prepareStatement(
                 "INSERT OR REPLACE INTO replaced_blocks (world, x, y, z) VALUES (?, ?, ?, ?)")) {
-            ps.setString(1, world);
-            ps.setInt(2, x);
-            ps.setInt(3, y);
-            ps.setInt(4, z);
+            bindBlock(ps, world, x, y, z);
             ps.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "[CM] markBlockReplaced error", e);
+            plugin.getLogger().log(Level.WARNING, "Erreur d'enregistrement d'un bloc posé", e);
         }
     }
 
-    public boolean isBlockReplaced(String world, int x, int y, int z) {
+    public synchronized boolean isBlockReplaced(String world, int x, int y, int z) {
         if (!isConnected()) return false;
         try (PreparedStatement ps = connection.prepareStatement(
                 "SELECT 1 FROM replaced_blocks WHERE world = ? AND x = ? AND y = ? AND z = ?")) {
-            ps.setString(1, world);
-            ps.setInt(2, x);
-            ps.setInt(3, y);
-            ps.setInt(4, z);
-            return ps.executeQuery().next();
+            bindBlock(ps, world, x, y, z);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "[CM] isBlockReplaced error", e);
+            plugin.getLogger().log(Level.WARNING, "Erreur de vérification d'un bloc posé", e);
             return false;
         }
     }
 
-    public void removeBlockReplaced(String world, int x, int y, int z) {
+    public synchronized void removeBlockReplaced(String world, int x, int y, int z) {
         if (!isConnected()) return;
         try (PreparedStatement ps = connection.prepareStatement(
                 "DELETE FROM replaced_blocks WHERE world = ? AND x = ? AND y = ? AND z = ?")) {
-            ps.setString(1, world);
-            ps.setInt(2, x);
-            ps.setInt(3, y);
-            ps.setInt(4, z);
+            bindBlock(ps, world, x, y, z);
             ps.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "[CM] removeBlockReplaced error", e);
+            plugin.getLogger().log(Level.WARNING, "Erreur de suppression d'un bloc posé", e);
         }
     }
 
+    private void bindBlock(PreparedStatement ps, String world, int x, int y, int z) throws SQLException {
+        ps.setString(1, world);
+        ps.setInt(2, x);
+        ps.setInt(3, y);
+        ps.setInt(4, z);
+    }
+
     // ─────────────────────────────────────────────
-    //  LEADERBOARD
+    //  CLASSEMENT
     // ─────────────────────────────────────────────
 
     public enum LeaderboardType { LEVEL, XP, TOKENS, BLOCKS_MINED }
 
-    public List<LeaderboardEntry> getTop(LeaderboardType type, int limit) {
+    public synchronized List<LeaderboardEntry> getTop(LeaderboardType type, int limit) {
         List<LeaderboardEntry> entries = new ArrayList<>();
         if (!isConnected()) return entries;
 
-        String column = switch (type) {
-            case LEVEL        -> "level";
-            case XP           -> "xp";
-            case TOKENS       -> "tokens";
-            case BLOCKS_MINED -> "blocks_mined";
+        String orderBy = switch (type) {
+            case LEVEL        -> "level DESC, xp DESC"; // à niveau égal, le plus d'XP passe devant
+            case XP           -> "xp DESC";
+            case TOKENS       -> "tokens DESC";
+            case BLOCKS_MINED -> "blocks_mined DESC";
         };
 
-        String sql = String.format(SELECT_TOP, column);
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(String.format(SELECT_TOP, orderBy))) {
             ps.setInt(1, limit);
-            ResultSet rs = ps.executeQuery();
-            int rank = 1;
-            while (rs.next()) {
-                entries.add(new LeaderboardEntry(
-                        rs.getString("username"),
-                        UUID.fromString(rs.getString("uuid")),
-                        rank++,
-                        rs.getInt("level"),
-                        rs.getInt("xp"),
-                        rs.getInt("tokens"),
-                        rs.getInt("blocks_mined")
-                ));
+            try (ResultSet rs = ps.executeQuery()) {
+                int rank = 1;
+                while (rs.next()) {
+                    entries.add(new LeaderboardEntry(
+                            rs.getString("username"),
+                            UUID.fromString(rs.getString("uuid")),
+                            rank++,
+                            rs.getInt("level"),
+                            rs.getInt("xp"),
+                            rs.getInt("tokens"),
+                            rs.getInt("blocks_mined")
+                    ));
+                }
             }
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "[CraftMining] Erreur leaderboard", e);
+            plugin.getLogger().log(Level.WARNING, "Erreur de lecture du classement", e);
         }
         return entries;
-    }
-
-    public boolean isConnected() {
-        try { return connection != null && !connection.isClosed(); }
-        catch (SQLException e) { return false; }
     }
 
     public record LeaderboardEntry(
             String username, UUID uuid, int rank,
             int level, int xp, int tokens, int blocksMined) {}
+
+    // ─────────────────────────────────────────────
+    //  OUTILS INTERNES
+    // ─────────────────────────────────────────────
+
+    private boolean columnExists(String table, String column) throws SQLException {
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery("PRAGMA table_info(" + table + ");")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) return true;
+            }
+        }
+        return false;
+    }
 }
